@@ -7,18 +7,47 @@
 
 啟動：
     python app.py              # 開發用，http://127.0.0.1:5000
-    gunicorn app:app           # 正式部署
+    gunicorn -c gunicorn.conf.py app:app   # 正式部署（見 deploy/）
 """
 from __future__ import annotations
 
+import hashlib
 import os
+from functools import lru_cache
+from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 app = Flask(__name__)
+
+# 放在 Cloudflare Tunnel / Nginx 後面時，信任一層代理送來的 X-Forwarded-* 標頭，
+# 網站才知道使用者其實是用 https 連進來的。
+if os.getenv("BEHIND_PROXY", "0") == "1":
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# 靜態檔快取 5 分鐘：Cloudflare 會照這個時間快取，更新程式後最多 5 分鐘全部生效
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = int(os.getenv("STATIC_MAX_AGE", "300"))
+
+
+@lru_cache(maxsize=64)
+def _file_hash(path: str, mtime: float) -> str:
+    return hashlib.md5(Path(path).read_bytes()).hexdigest()[:10]
+
+
+@app.template_global()
+def asset(filename: str) -> str:
+    """帶版本號的靜態檔網址（檔案內容一變，網址就變，瀏覽器和 Cloudflare 不會拿到舊檔）。"""
+    path = BASE_DIR / "static" / filename
+    try:
+        v = _file_hash(str(path), path.stat().st_mtime)
+    except OSError:
+        v = "0"
+    return url_for("static", filename=filename, v=v)
 
 # Firebase「網頁應用程式」設定。這些值會出現在前端，本來就是公開的；
 # 真正保護資料的是 firestore.rules 安全規則。
@@ -81,6 +110,8 @@ def security_headers(resp):
     resp.headers.setdefault("Permissions-Policy", "geolocation=(self), camera=(self)")
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if resp.mimetype == "text/html":
+        resp.headers["Cache-Control"] = "no-cache"  # 首頁每次都拿最新的，才會帶到新版靜態檔
     return resp
 
 

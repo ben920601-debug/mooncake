@@ -16,8 +16,10 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if true;
       allow create, update: if signedIn() && me() == uid
-        && d().keys().hasOnly(['name', 'photo', 'updatedAt'])
-        && str(d().name, 60) && str(d().photo, 500);
+        && d().keys().hasOnly(['name', 'photo', 'registered', 'updatedAt'])
+        && str(d().name, 60) && str(d().photo, 500)
+        // 只有用密碼註冊過的帳號才能標成 registered
+        && (d().get('registered', false) == false || request.auth.token.firebase.sign_in_provider == 'password');
       allow delete: if signedIn() && me() == uid;
     }
 
