@@ -1,0 +1,156 @@
+/* 中秋烤肉地圖 — 中秋夜空主題（刻意只做深色）
+   版面：左邊地圖（手機在上方），右邊月光面板放地點、邀請、排行榜 */
+:root {
+  --night: #121833; --night-2: #1a2246; --night-3: #252f5c;
+  --ink: #f3ecd8; --muted: #a9a8c8; --line: rgba(243, 236, 216, .13);
+  --moon: #f6d98b; --ember: #ff8a3d; --spark: #ff6fa8; --jade: #79d4b0; --warn: #f0b25a;
+  --display: "LXGW WenKai TC", "Kaiti TC", "STKaiti", "KaiTi", serif;
+  --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { height: 100%; margin: 0 }
+body { background: var(--night); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0) }
+button, input, select, textarea { font: inherit; color: inherit }
+button { cursor: pointer }
+a { color: var(--moon) }
+:focus-visible { outline: 2px solid var(--moon); outline-offset: 2px }
+
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 420px; height: 100% }
+@media (max-width: 860px) { .app { grid-template-columns: 1fr; height: auto } }
+
+/* ---------- map ---------- */
+.mapwrap { position: relative; min-height: 0; overflow: hidden }
+@media (max-width: 860px) { .mapwrap { height: 58vh; min-height: 380px } }
+#map { position: absolute; inset: 0; background: #0e1430 }
+.leaflet-container { font-family: var(--body) }
+/* 把一般的淺色地圖調成中秋夜空：反轉明暗、轉回原本色相、偏藍 */
+#map.darken .leaflet-tile-pane { filter: invert(1) hue-rotate(195deg) brightness(.82) contrast(.92) saturate(.55) }
+.leaflet-control-attribution { background: rgba(18, 24, 51, .75) !important; color: var(--muted) !important }
+.leaflet-control-attribution a { color: var(--muted) !important }
+.leaflet-bar a { background: rgba(18, 24, 51, .9) !important; color: var(--ink) !important; border-color: var(--line) !important }
+.leaflet-tooltip { background: var(--night-2); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 4px 14px #0008; font-weight: 500 }
+.leaflet-tooltip-top::before { border-top-color: var(--night-2) }
+.leaflet-tooltip-right::before { border-right-color: var(--night-2) }
+
+/* 地圖標記：烤肉＝橘色火光，煙火＝粉紅星芒 */
+.pin { display: grid; place-items: center }
+.pin span { display: block; width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--night) }
+.pin-bbq span { background: var(--ember); box-shadow: 0 0 0 6px rgba(255, 138, 61, .25), 0 0 22px 6px rgba(255, 138, 61, .55) }
+.pin-fw span { background: var(--spark); border-radius: 0; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); filter: drop-shadow(0 0 8px rgba(255, 111, 168, .9)) }
+.pin.sel span { border-color: var(--ink) }
+.pin-bbq.sel span { animation: ember 1.6s ease-in-out infinite }
+@keyframes ember { 50% { box-shadow: 0 0 0 10px rgba(255, 138, 61, .15), 0 0 30px 10px rgba(255, 138, 61, .7) } }
+.pin-place span { background: transparent; border: 3px dashed var(--moon); box-shadow: 0 0 0 4px rgba(246, 217, 139, .2) }
+
+.maptop { position: absolute; left: 16px; right: 70px; top: 14px; z-index: 500; pointer-events: none }
+.brand { font-family: var(--display); font-size: 28px; font-weight: 700; letter-spacing: .04em; text-shadow: 0 2px 12px #000c }
+.brand small { display: block; font-family: var(--body); font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: .08em }
+.mapctl { position: absolute; right: 12px; top: 14px; z-index: 500 }
+.legend { position: absolute; left: 12px; bottom: 22px; z-index: 500; display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); background: rgba(18, 24, 51, .8); padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line) }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px }
+.lg-bbq { background: var(--ember) } .lg-fw { background: var(--spark) } .lg-me { background: var(--moon) } .lg-ppl { background: #9aa3d8 }
+.placebar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 64px; z-index: 600; width: min(94%, 520px); background: var(--night-2); border: 1px solid var(--moon); border-radius: 14px; padding: 12px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; box-shadow: 0 10px 30px #0009 }
+.placebar p { margin: 0; flex: 1 1 200px; font-size: 14px }
+
+/* ---------- panel ---------- */
+.panel { background: var(--night-2); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0 }
+@media (max-width: 860px) { .panel { border-left: 0; border-top: 1px solid var(--line) } }
+.me { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line) }
+.me img { width: 38px; height: 38px; border-radius: 50%; flex: none }
+.me .who { flex: 1; min-width: 0 }
+.me .who b { display: block; font-size: 15px; overflow-wrap: anywhere }
+.me .who span { font-size: 12px; color: var(--muted) }
+.link { background: none; border: 0; padding: 0; color: var(--moon); text-decoration: underline; font-size: 12px }
+.pts { font-family: var(--display); font-size: 24px; color: var(--moon); font-variant-numeric: tabular-nums; text-align: right; line-height: 1.1 }
+.pts small { display: block; font-family: var(--body); font-size: 11px; color: var(--muted) }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px }
+.btn { border: 1px solid var(--line); background: var(--night-3); border-radius: 12px; padding: 10px 12px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-align: center }
+.btn:hover:not(:disabled) { border-color: var(--muted) }
+.btn:disabled { opacity: .45; cursor: not-allowed }
+.btn.ember { background: var(--ember); border-color: var(--ember); color: #2a1300 }
+.btn.spark { background: var(--spark); border-color: var(--spark); color: #33071a }
+.btn.moon { background: var(--moon); border-color: var(--moon); color: #2b2208 }
+.btn.ghost { background: transparent }
+.btn.sm { padding: 6px 10px; font-size: 13px; border-radius: 9px }
+.btn.round { width: 44px; height: 44px; border-radius: 50%; padding: 0; background: rgba(18, 24, 51, .9) }
+.btn.wide { grid-column: 1 / -1 }
+.tabs { display: flex; border-bottom: 1px solid var(--line); padding: 0 8px }
+.tabs button { flex: 1; background: none; border: 0; padding: 12px 4px; color: var(--muted); border-bottom: 2px solid transparent; font-weight: 500 }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--moon) }
+.badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--spark); color: #33071a; font-size: 11px; font-weight: 700; margin-left: 4px; line-height: 18px }
+.scroll { flex: 1; overflow: auto; padding: 12px 16px 28px; min-height: 0; display: flex; flex-direction: column; gap: 10px }
+@media (max-width: 860px) { .scroll { overflow: visible } }
+.notice { font-size: 13px; color: var(--muted); background: rgba(240, 178, 90, .08); border: 1px solid rgba(240, 178, 90, .3); border-radius: 10px; padding: 10px 12px }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center }
+.filters button { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted) }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--night); border-color: var(--ink) }
+.hint { font-size: 12px; color: var(--muted); margin-left: auto }
+
+.card { border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; gap: 12px; background: rgba(255, 255, 255, .02); text-align: left; width: 100% }
+.card.col { flex-direction: column }
+button.card:hover { border-color: var(--muted) }
+.card.sel { border-color: var(--moon); background: rgba(246, 217, 139, .06) }
+.ico { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center }
+.ico.bbq { background: rgba(255, 138, 61, .16); color: var(--ember) }
+.ico.fw { background: rgba(255, 111, 168, .16); color: var(--spark) }
+.card .body { flex: 1; min-width: 0 }
+.card h3 { margin: 0; font-size: 15px; font-weight: 700; overflow-wrap: anywhere }
+.meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap }
+.meta.mt { margin-top: 4px }
+.pill { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; line-height: 18px; white-space: nowrap }
+.pill.ok { color: var(--jade) } .pill.wait { color: var(--warn) } .pill.no { color: var(--muted) } .pill.host { color: var(--moon) }
+.pill.bbq { color: var(--ember) } .pill.fw { color: var(--spark) }
+.empty { text-align: center; padding: 28px 12px; color: var(--muted) }
+.empty.sm { padding: 12px }
+.empty .big { color: var(--ember) }
+.empty h4 { font-family: var(--display); font-size: 21px; color: var(--ink); margin: 6px 0 }
+.sec { font-size: 12px; letter-spacing: .12em; color: var(--muted); margin: 8px 0 0 }
+
+.detail { display: flex; flex-direction: column; gap: 12px }
+.detail h2 { font-family: var(--display); font-size: 28px; margin: 0; line-height: 1.25; text-wrap: balance; overflow-wrap: anywhere }
+.note { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; margin: 0 }
+.kv dt { color: var(--muted) } .kv dd { margin: 0; overflow-wrap: anywhere }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
+.row.end { justify-content: flex-end }
+.people { display: flex; flex-direction: column; gap: 8px }
+.person { display: flex; gap: 10px; align-items: center; font-size: 14px }
+.person img { width: 30px; height: 30px; border-radius: 50%; flex: none }
+.person .n { flex: 1; min-width: 0; overflow-wrap: anywhere }
+.person .n small { display: block; color: var(--muted); font-size: 12px }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px }
+.photo { margin: 0; border-radius: 10px; overflow: hidden; background: var(--night-3); border: 1px solid var(--line) }
+.photo img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover }
+.photo img.missing { opacity: .2 }
+.photo figcaption { font-size: 11px; color: var(--muted); padding: 4px 6px; overflow-wrap: anywhere }
+.board { display: flex; flex-direction: column; gap: 6px }
+.rank { display: grid; grid-template-columns: 28px 30px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line) }
+.rank .no { font-family: var(--display); font-size: 18px; color: var(--muted); text-align: center }
+.rank:first-child { border-color: rgba(246, 217, 139, .5) }
+.rank:first-child .no { color: var(--moon) }
+.rank img { width: 30px; height: 30px; border-radius: 50% }
+.rank .nm { min-width: 0; overflow-wrap: anywhere }
+.rank .s { font-family: var(--display); font-size: 18px; color: var(--moon); font-variant-numeric: tabular-nums }
+.rules { font-size: 13px; color: var(--muted); line-height: 1.7; margin: 0 }
+
+/* ---------- sheet ---------- */
+.veil { position: fixed; inset: 0; background: rgba(5, 8, 20, .62); display: flex; align-items: flex-end; justify-content: center; z-index: 1000; padding: 16px }
+@media (min-width: 861px) { .veil { align-items: center } }
+.sheet { background: var(--night-2); border: 1px solid var(--line); border-radius: 18px; width: min(100%, 480px); max-height: 90vh; overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 60px #000a }
+.sheet h3 { font-family: var(--display); font-size: 23px; margin: 0; overflow-wrap: anywhere }
+.sub { margin: 0; color: var(--muted); font-size: 14px }
+.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted) }
+.f input, .f textarea { background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; color: var(--ink); font-size: 16px }
+.f textarea { min-height: 72px; resize: vertical }
+.locline { color: var(--ink); font-size: 14px }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px }
+.seg button { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: none; font-weight: 700 }
+.seg button[aria-pressed="true"].bbq { background: rgba(255, 138, 61, .18); border-color: var(--ember); color: var(--ember) }
+.seg button[aria-pressed="true"].fw { background: rgba(255, 111, 168, .18); border-color: var(--spark); color: var(--spark) }
+.preview { max-height: 200px; border-radius: 10px; object-fit: cover; width: 100% }
+.err { color: var(--spark); font-size: 13px; margin: 0 }
+.fine { color: var(--muted); font-size: 12px; margin: 0 }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--ink); color: var(--night); padding: 10px 18px; border-radius: 999px; font-weight: 700; z-index: 1100; box-shadow: 0 8px 24px #0008; max-width: 90vw; text-align: center }
+@media (prefers-reduced-motion: reduce) { .pin-bbq.sel span { animation: none } }

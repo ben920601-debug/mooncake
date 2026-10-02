@@ -1,0 +1,4 @@
+Flask>=3.0,<4
+python-dotenv>=1.0
+gunicorn>=22.0
+firebase-admin>=6.5   # 只有 admin_tools.py 需要

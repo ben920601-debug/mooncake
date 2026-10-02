@@ -1,0 +1,99 @@
+rules_version = '2';
+
+// 中秋烤肉地圖 — Firestore 安全規則
+// 部署：firebase deploy --only firestore:rules
+// 或貼到 Firebase 主控台 → Firestore Database → 規則 → 發布
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function d() { return request.resource.data; }
+    function str(v, max) { return v is string && v.size() <= max; }
+    function partyPath(id) { return /databases/$(database)/documents/parties/$(id); }
+
+    // 公開顯示名稱與頭像（登入時自動寫入）
+    match /users/{uid} {
+      allow read: if true;
+      allow create, update: if signedIn() && me() == uid
+        && d().keys().hasOnly(['name', 'photo', 'updatedAt'])
+        && str(d().name, 60) && str(d().photo, 500);
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    // 分享的位置（前端已四捨五入到約 100 公尺）
+    match /players/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && d().keys().hasOnly(['lat', 'lng', 'city', 'updatedAt'])
+        && d().lat is number && d().lng is number && str(d().city, 20);
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    // 烤肉點 / 煙火攤
+    match /parties/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && d().keys().hasOnly(['type', 'title', 'landmark', 'when', 'note', 'capacity', 'lat', 'lng', 'city', 'hostId', 'active', 'createdAt', 'expiresAt'])
+        && d().hostId == me()
+        && d().type in ['bbq', 'fireworks']
+        && str(d().title, 40) && d().title.size() > 0
+        && str(d().landmark, 60) && str(d().when, 40) && str(d().note, 300) && str(d().city, 20)
+        && (d().capacity == null || (d().capacity is int && d().capacity >= 2 && d().capacity <= 99))
+        && d().lat is number && d().lng is number
+        && d().active == true
+        && d().createdAt is number && d().expiresAt is number
+        && d().expiresAt <= d().createdAt + 48 * 3600 * 1000;
+      // 只有主人可以修改（例如結束活動），且不能把活動轉給別人
+      allow update: if signedIn() && resource.data.hostId == me()
+        && d().diff(resource.data).affectedKeys().hasOnly(['active', 'endedAt', 'title', 'landmark', 'when', 'note', 'capacity']);
+      allow delete: if signedIn() && resource.data.hostId == me();
+    }
+
+    // 申請（apply：訪客 → 主人）與邀請（invite：主人 → 附近的人）
+    // 兩種情況都由 toId 那個人回覆
+    match /requests/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && d().keys().hasOnly(['partyId', 'kind', 'fromId', 'toId', 'hostId', 'msg', 'status', 'createdAt'])
+        && d().fromId == me()
+        && d().status == 'pending'
+        && str(d().msg, 140) && d().createdAt is number
+        && exists(partyPath(d().partyId))
+        && d().hostId == get(partyPath(d().partyId)).data.hostId
+        && (
+          (d().kind == 'apply' && d().toId == d().hostId && me() != d().hostId)
+          || (d().kind == 'invite' && me() == d().hostId && d().toId is string && d().toId != me())
+        );
+      allow update: if signedIn()
+        && resource.data.status == 'pending'
+        && resource.data.toId == me()
+        && d().diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt'])
+        && d().status in ['accepted', 'declined'];
+      // 申請人可以取消還沒被回覆的申請
+      allow delete: if signedIn() && resource.data.fromId == me() && resource.data.status == 'pending';
+    }
+
+    // 打卡
+    match /checkins/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && d().keys().hasOnly(['partyId', 'userId', 'photoId', 'caption', 'createdAt'])
+        && d().userId == me()
+        && d().photoId is string && str(d().caption, 60) && d().createdAt is number
+        && exists(partyPath(d().partyId));
+      allow delete: if signedIn() && resource.data.userId == me();
+    }
+
+    // 照片（壓縮後的 JPEG，以 data URL 存放，不需要 Cloud Storage）
+    match /photos/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && d().keys().hasOnly(['ownerId', 'data', 'createdAt'])
+        && d().ownerId == me()
+        && d().data is string && d().data.size() < 750000
+        && d().createdAt is number;
+      allow delete: if signedIn() && resource.data.ownerId == me();
+    }
+  }
+}

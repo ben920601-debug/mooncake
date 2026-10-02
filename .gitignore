@@ -1,0 +1,8 @@
+.env
+serviceAccount.json
+*.json.key
+__pycache__/
+.venv/
+venv/
+.firebase/
+.env.example
