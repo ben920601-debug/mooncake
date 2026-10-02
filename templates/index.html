@@ -48,6 +48,13 @@
   };
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- 讓 app.js 匯入的模組也帶版本號，更新後不會拿到快取的舊檔 -->
+<script type="importmap">
+  {"imports": {
+    "{{ url_for('static', filename='js/store.js') }}": "{{ asset('js/store.js') }}",
+    "{{ url_for('static', filename='js/util.js') }}": "{{ asset('js/util.js') }}"
+  }}
+</script>
 <script type="module" src="{{ asset('js/app.js') }}"></script>
 </body>
 </html>
