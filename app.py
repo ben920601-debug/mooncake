@@ -116,7 +116,7 @@ def security_headers(resp):
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5000"))
+    port = int(os.getenv("PORT", "10002"))
     mode = "Firebase" if firebase_config() else "示範模式（尚未設定 Firebase）"
     print(f"中秋烤肉地圖啟動中：http://127.0.0.1:{port}  [{mode}]")
     app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG") == "1")
