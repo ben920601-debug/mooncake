@@ -99,7 +99,7 @@ sudo bash /opt/mooncake-bbq-map/deploy/setup_tunnel.sh eyJ...你的Token...
 
 Firebase 主控台 → **Authentication** → **設定** → **授權網域** → **新增網域** → 輸入 `mooncake.ricecook.org`
 
-沒加的話，打開網站會顯示「這個網域還沒加入 Firebase 授權網域」，訪客登入會失敗。
+沒加的話，輸入名字進入時會顯示「這個網域還沒加入 Firebase 授權網域」。
 
 ## 第 5 步：Cloudflare 小設定（建議）
 
@@ -112,7 +112,7 @@ Firebase 主控台 → **Authentication** → **設定** → **授權網域** �
 
 用手機打開 **https://mooncake.ricecook.org**：
 
-1. 右上角出現訪客名字（例如「玉兔4821」）→ Firebase 匿名登入正常
+1. 跳出「你是誰？」，輸入名字和 4 位數密碼後右上角出現你的名字 → Firebase 登入正常
 2. 按地圖右上的準心，瀏覽器詢問定位權限 → 允許後地圖飛到你的位置
 3. 發起一個烤肉點、上傳一張照片 → 用另一支手機打開，應該馬上看得到
 
@@ -150,7 +150,8 @@ bash deploy/deploy.sh ubuntu@你的伺服器IP
 | 打開網址出現 **Cloudflare 502 / 1033** | Tunnel 連不到網站。在伺服器跑 `curl http://127.0.0.1:8000/healthz`：沒回應就看 `journalctl -u mooncake`；有回應就檢查路由的 URL 是不是 `localhost:8000`、`systemctl status cloudflared` 是否正常。 |
 | 網址打不開、找不到網域 | 路由沒建立 DNS。到 DNS 頁面確認有 `mooncake` 的 CNAME（目標是 `xxxx.cfargotunnel.com`）。 |
 | 「網域還沒加入 Firebase 授權網域」 | 做第 4 步。 |
-| 「Firebase 還沒開啟匿名或電子郵件/密碼登入」 | Firebase → Authentication → 登入方式，兩個都啟用。 |
+| `auth/configuration-not-found` | Firebase → Authentication 還沒按「開始使用」，或「電子郵件/密碼」沒啟用。也可能 `.env` 填到別的專案。 |
+| 「Firebase 還沒開啟電子郵件/密碼登入」 | Firebase → Authentication → 登入方式，啟用「電子郵件/密碼」。 |
 | 「沒有權限做這件事」 | `firestore.rules` 沒有發布最新版，重新貼上並發布。 |
 | 定位按了沒反應 | 確認網址是 `https://`，並且手機瀏覽器有允許這個網站使用位置。 |
 | 更新後畫面還是舊的 | 等 5 分鐘或在 Cloudflare → 快取 → 清除快取（Purge Everything）。 |

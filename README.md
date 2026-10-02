@@ -4,7 +4,7 @@
 
 - **後端**：Python（Flask），負責提供網頁和讀取 Firebase 設定
 - **前端**：HTML / CSS / JavaScript，地圖用 Leaflet + OpenStreetMap（用 CSS 調成夜空色調），定位用瀏覽器 GPS
-- **資料庫**：Firebase Authentication（匿名訪客 + 用戶名/密碼註冊）+ Cloud Firestore（即時同步）
+- **資料庫**：Firebase Authentication（名字 + 4 位數密碼）+ Cloud Firestore（即時同步）
 - **示範模式**：還沒設定 Firebase 時也能直接跑，資料只存在你的瀏覽器
 
 ---
@@ -25,8 +25,8 @@ python app.py
 
 打開 <http://127.0.0.1:5000>。畫面上會顯示「示範模式」。
 
-- 打開就自動是訪客，會隨機給你一個名字（例如「玉兔4821」），可以按「註冊保留資料」測試註冊
-- **開第二個分頁會是另一個訪客**，可以自己測試：A 分頁發起烤肉 → B 分頁申請 → A 分頁接受
+- 打開會請你輸入名字和 4 位數密碼（隨便取，例如「小明」「1234」）
+- **開第二個分頁用另一個名字進入**，可以自己測試：A 分頁發起烤肉 → B 分頁申請 → A 分頁接受
 - 按地圖右上的準心可以定位（localhost 允許 GPS）
 
 ---
@@ -38,12 +38,10 @@ python app.py
 2. 專案首頁按「</>」新增**網頁應用程式**，取個名字，**不用**勾 Firebase Hosting
 3. 畫面會出現一段 `firebaseConfig`，先留著
 
-### 2-2 開啟登入方式（兩個都要開）
-Authentication → 開始使用 → 登入方式：
-1. **匿名** → 啟用 → 儲存（打開網站就自動以訪客身分登入）
-2. **電子郵件/密碼** → 啟用 → 儲存（「電子郵件連結」不用開）
+### 2-2 開啟登入方式
+Authentication → **開始使用** → 登入方式 → **電子郵件/密碼** → 啟用（只開第一個開關，「電子郵件連結」不用開）→ 儲存
 
-> 使用者註冊時只需要輸入用戶名和密碼，不需要 email。程式會把用戶名轉成一個內部帳號（`u<雜湊>@users.mooncake-bbq.app`），所以 Firebase 這邊仍然要開「電子郵件/密碼」。
+> 玩家只會輸入「名字 + 4 位數密碼」，不需要 email。程式會把名字轉成一個內部帳號（`u<雜湊>@users.mooncake-bbq.app`），所以 Firebase 這邊要開「電子郵件/密碼」。
 
 ### 2-3 建立 Firestore 資料庫
 Firestore Database → 建立資料庫 → 位置選 `asia-east1（台灣）` → 選**正式版模式** → 建立
@@ -74,7 +72,7 @@ cp .env.example .env
 | messagingSenderId | FIREBASE_MESSAGING_SENDER_ID |
 | appId | FIREBASE_APP_ID |
 
-重新執行 `python app.py`，終端機會顯示 `[Firebase]`，網頁右上角會顯示你的訪客名字（例如「玉兔4821」），旁邊有「註冊保留資料」。
+重新執行 `python app.py`，終端機會顯示 `[Firebase]`，打開網頁會跳出「你是誰？」，輸入名字和 4 位數密碼就能進入。
 
 > 這些設定值會出現在網頁原始碼裡，這是正常的，Firebase 的網頁設定本來就是公開的。真正保護資料的是第 2-4 步的安全規則。
 
@@ -97,15 +95,11 @@ sudo bash /opt/mooncake-bbq-map/deploy/setup_tunnel.sh <Token>     # 伺服器�
 
 ## 4. 帳號怎麼運作
 
-| 身分 | 怎麼來的 | 能做什麼 | 注意 |
-|---|---|---|---|
-| 訪客 | 打開網站自動建立（Firebase 匿名登入） | 全部功能都能用 | 只綁在這個瀏覽器；清除瀏覽資料或換手機就找不回來 |
-| 已註冊 | 訪客按「註冊保留資料」，輸入用戶名 + 密碼 | 同上，換裝置可用用戶名登入 | 註冊會沿用訪客的帳號，之前的活動、打卡、積分全部保留 |
-
-- 用戶名 2–20 字，可用中英文、數字、底線、減號，不分大小寫，不能重複。
-- 密碼至少 6 個字元（Firebase 的規定）。
-- 因為沒有 email，**忘記密碼無法自行重設**。管理員可以到 Firebase 主控台 → Authentication 刪除該帳號讓他重新註冊。
-- 登出後會自動變成一個新的訪客。
+- 打開網站可以先逛地圖、看照片。要發起、申請、打卡或分享位置時，會請你輸入**名字 + 4 位數密碼**。
+- **第一次輸入的名字會自動建立帳號**，之後用同一組名字和密碼就能回來，換手機也一樣。
+- 名字就是大家看到的暱稱，也是帳號，不分大小寫、不能重複。名字已經被用過、密碼又不對時，會提示「這個名字已經有人用了」。
+- 忘記密碼的話換個名字重新開始；或由管理員到 Firebase 主控台 → Authentication 刪掉那個帳號，讓他用原本的名字重新建立。
+- 4 位數密碼只有 1 萬種組合，適合朋友間的活動，不適合保護重要資料。Firebase 會自動擋下短時間內大量嘗試登入的行為。
 
 ## 5. 遊戲規則與功能
 
@@ -151,7 +145,7 @@ mooncake-bbq-map/
 
 | 集合 | 文件 ID | 內容 | 誰能寫 |
 |---|---|---|---|
-| `users` | 使用者 uid | name（訪客名或用戶名）, photo, registered | 本人 |
+| `users` | 使用者 uid | name, photo | 本人 |
 | `players` | 使用者 uid | lat, lng, city, updatedAt | 本人 |
 | `parties` | 自動 | type (`bbq`/`fireworks`), title, landmark, when, note, capacity, lat, lng, city, hostId, active, createdAt, expiresAt | 建立：登入者；修改／刪除：主人 |
 | `requests` | 自動 | partyId, kind (`apply`/`invite`), fromId, toId, hostId, msg, status, createdAt | 建立：申請人或主人；回覆：toId 本人 |
@@ -184,7 +178,6 @@ python admin_tools.py purge --days 30 --yes  # 真的刪
 
 ## 9. 已知限制
 
-- **訪客帳號會累積**：每個沒註冊的訪客都會在 Firebase Authentication 留下一個匿名帳號。人很多時，可以把專案升級到 Identity Platform，開啟「自動清除匿名帳號」。
 - **積分是前端計算的**：理論上有人可以狂上傳照片刷分。朋友之間玩沒問題；要公開比賽的話，建議改用 Cloud Functions 在伺服器端計分。
 - **申請留言對所有登入者可見**：`requests` 集合目前是登入就能讀（為了顯示誰加入了哪場）。不要在留言裡寫手機號碼等個資。
 - **縣市名稱是估算的**：用離哪個縣市中心最近來判斷，邊界附近可能不準；導航請以座標為準。

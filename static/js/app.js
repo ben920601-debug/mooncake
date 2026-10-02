@@ -1,5 +1,5 @@
 // 中秋烤肉地圖 — 前端主程式
-import { createStore, checkUsername } from "./store.js";
+import { createStore, checkEntry } from "./store.js";
 import { CITIES, nearestCity, km, fmtDist, ago, esc, compressImage } from "./util.js";
 
 const CFG = window.APP_CONFIG || { firebase: null, demo: true, eventHours: 12 };
@@ -129,21 +129,17 @@ $("placeOk").onclick = () => {
 function renderPanel() {
   const sc = scores(); const me = uid(); const mine = myPlayer();
   if (me) {
-    const anon = S.user.isAnonymous;
     const status = mine ? `我在${esc(mine.city || "")}附近 · ${ago(mine.updatedAt)}更新` : "還沒分享位置";
-    $("me").innerHTML = `${avatar(me)}<div class="who"><b>${esc(nm(me))} <span class="pill ${anon ? "wait" : "ok"}">${anon ? "訪客" : "已註冊"}</span></b><span>${status}</span>
-      <span class="authrow">${anon
-        ? `<button class="link" data-act="auth" data-mode="register">註冊保留資料</button> · <button class="link" data-act="auth" data-mode="login">我有帳號</button>`
-        : `<button class="link" data-act="signout">登出</button>`}</span></div><div class="pts">${sc[me] || 0}<small>月兔積分</small></div>`;
+    $("me").innerHTML = `${avatar(me)}<div class="who"><b>${esc(nm(me))}</b><span>${status} · <button class="link" data-act="signout">登出</button></span></div><div class="pts">${sc[me] || 0}<small>月兔積分</small></div>`;
   } else {
-    $("me").innerHTML = `<div class="who"><b>中秋快樂</b><span>${S.authError ? esc(S.authError) : "正在以訪客身分進入…"}</span></div>`;
+    $("me").innerHTML = `<div class="who"><b>中秋快樂</b><span>${S.authError ? esc(S.authError) : "輸入名字就能發起、申請和打卡"}</span></div><button class="btn moon" data-act="auth" ${S.store ? "" : "disabled"}>輸入名字</button>`;
   }
-  const dis = me ? "" : "disabled";
+  const dis = S.store ? "" : "disabled";
   $("actions").innerHTML = `<button class="btn ember" data-act="new" data-type="bbq" ${dis}>${ICON.bbq}我在這烤肉</button><button class="btn spark" data-act="new" data-type="fireworks" ${dis}>${ICON.fireworks}我在賣煙火</button><button class="btn moon wide" data-act="setme" ${dis}>${mine ? "更新我的位置" : "分享我的位置，讓附近的主人邀請我"}</button>`;
   const nIn = inbox().length;
   $("tabs").innerHTML = [["events", "地點"], ["inbox", "邀請與申請"], ["board", "月兔榜"]].map(([k, l]) => `<button role="tab" aria-selected="${S.tab === k}" data-act="tab" data-tab="${k}">${l}${k === "inbox" && nIn ? `<span class="badge">${nIn}</span>` : ""}</button>`).join("");
   let h = "";
-  if (S.store && S.store.mode === "demo") h += `<div class="notice">示範模式：還沒設定 Firebase，資料只存在這台電腦的瀏覽器。開第二個分頁會是另一個示範身分，可以用來測試申請與邀請。</div>`;
+  if (S.store && S.store.mode === "demo") h += `<div class="notice">示範模式：還沒設定 Firebase，資料只存在這台電腦的瀏覽器。開第二個分頁用另一個名字進入，就能自己測試申請與邀請。</div>`;
   if (S.status === "error") h += `<div class="notice">連不上資料庫。請確認 Firebase 設定與安全規則已部署，再重新整理。</div>`;
   if (S.tab === "events") h += S.selected && partyById(S.selected) ? detailHTML(partyById(S.selected)) : listHTML();
   if (S.tab === "inbox") h += inboxHTML();
@@ -179,7 +175,7 @@ function detailHTML(p) {
   const full = p.type === "bbq" && p.capacity && mem.length + 1 >= p.capacity;
   const pos = myPos();
   let act = "";
-  if (!me) act = `<span class="pill no">連線中…</span>`;
+  if (!me) act = `<button class="btn moon" data-act="auth">輸入名字後就能申請或打卡</button>`;
   else {
     if (rel === "none" && p.type === "bbq") act += `<button class="btn ember" data-act="apply" data-pid="${esc(p.id)}" ${full ? "disabled" : ""}>${full ? "已額滿" : "申請加入"}</button>`;
     if (rel === "applied") { const r = S.requests.find((r) => r.partyId === p.id && r.status === "pending" && r.kind === "apply" && r.fromId === me); act += `<span class="pill wait">已送出申請，等主人回覆</span><button class="btn sm ghost" data-act="cancel" data-rid="${esc(r.id)}">取消申請</button>`; }
@@ -256,20 +252,16 @@ function openCreate(type, f = {}) {
   bindPhoto("c_photo", "c_prev");
 }
 const formVals = () => ({ title: $("c_title")?.value.trim(), landmark: $("c_landmark")?.value.trim(), when: $("c_when")?.value.trim(), capacity: $("c_cap")?.value, note: $("c_note")?.value.trim() });
-function openAuth(mode) {
-  const reg = mode === "register"; const anon = S.user && S.user.isAnonymous;
-  const mineCount = S.parties.filter((p) => p.hostId === uid()).length + S.checkins.filter((c) => c.userId === uid()).length;
-  openSheet(`<h3>${reg ? "註冊帳號" : "登入"}</h3>
-  <div class="seg"><button type="button" class="${reg ? "on" : ""}" aria-pressed="${reg}" data-act="auth" data-mode="register">註冊</button><button type="button" class="${reg ? "" : "on"}" aria-pressed="${!reg}" data-act="auth" data-mode="login">登入</button></div>
-  <p class="sub">${reg ? "只要用戶名和密碼，不需要 email。註冊後，你現在以訪客身分發起的活動、打卡和積分都會保留，換手機也能登入。" : "用之前註冊的用戶名和密碼登入。"}</p>
-  ${!reg && anon && mineCount ? `<p class="notice">你目前的訪客身分有 ${mineCount} 筆紀錄，登入其他帳號後就看不到了。想保留請改按「註冊」。</p>` : ""}
-  <label class="f">用戶名<input id="u_name" maxlength="20" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="2–20 個字，例如：中和烤肉王"></label>
-  <label class="f">密碼<input id="u_pw" type="password" autocomplete="${reg ? "new-password" : "current-password"}" placeholder="至少 6 個字元"></label>
-  ${reg ? `<label class="f">再輸入一次密碼<input id="u_pw2" type="password" autocomplete="new-password"></label>` : ""}
+function openAuth() {
+  openSheet(`<h3>你是誰？</h3>
+  <p class="sub">輸入名字和 4 位數密碼就能開始。第一次輸入會自動建立，之後用同一組名字和密碼就能回來，換手機也一樣。</p>
+  <label class="f">名字<input id="u_name" maxlength="20" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="例如：中和烤肉王"></label>
+  <label class="f">4 位數密碼<input id="u_pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="current-password" placeholder="例如：0915"></label>
   <p class="err" id="u_err" hidden></p>
-  <div class="row end"><button class="btn ghost" data-act="close">取消</button><button class="btn moon" data-act="doauth" data-mode="${reg ? "register" : "login"}">${reg ? "註冊" : "登入"}</button></div>
-  ${reg ? `<p class="fine">忘記密碼目前無法自行重設（因為沒有 email），請記好密碼。</p>` : ""}`);
-  $("sheetRoot").querySelector("form, .sheet").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") $("sheetRoot").querySelector("[data-act=doauth]").click(); });
+  <div class="row end"><button class="btn ghost" data-act="close">先逛逛</button><button class="btn moon" data-act="doauth">進入</button></div>
+  <p class="fine">名字是大家看到的暱稱，也是你的帳號。忘記密碼的話換個名字重新開始就好。</p>`);
+  $("u_pin").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4); });
+  $("sheetRoot").querySelector(".sheet").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") $("sheetRoot").querySelector("[data-act=doauth]").click(); });
 }
 function openCheckin(p) {
   pendingFile = null;
@@ -299,11 +291,10 @@ function errMsg(e) {
   if (c.includes("unauthenticated")) return "請先登入。";
   if (c.includes("quota") || c.includes("resource-exhausted")) return "空間或用量已滿，請稍後再試。";
   if (c.includes("unavailable")) return "網路不穩，請再試一次。";
-  if (c.includes("email-already-in-use") || c.includes("credential-already-in-use")) return "這個用戶名已經有人用了，換一個試試。";
-  if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found") || c.includes("invalid-email")) return "用戶名或密碼不正確。";
-  if (c.includes("weak-password") || c.includes("password-does-not-meet")) return "密碼至少要 6 個字元。";
+  if (c.includes("name-taken") || c.includes("email-already-in-use")) return "這個名字已經有人用了。如果是你，請確認 4 位數密碼；不是的話換個名字。";
   if (c.includes("too-many-requests")) return "嘗試太多次了，請過幾分鐘再試。";
-  if (c.includes("admin-restricted-operation") || c.includes("operation-not-allowed")) return "Firebase 還沒開啟「匿名」或「電子郵件/密碼」登入，請到 Authentication → 登入方式啟用。";
+  if (c.includes("configuration-not-found")) return "Firebase 專案還沒開啟 Authentication：請到主控台 → Authentication 按「開始使用」，並啟用「電子郵件/密碼」登入。";
+  if (c.includes("admin-restricted-operation") || c.includes("operation-not-allowed")) return "Firebase 還沒開啟「電子郵件/密碼」登入，請到 Authentication → 登入方式啟用。";
   if (c.includes("unauthorized-domain")) return "這個網域還沒加入 Firebase 授權網域，請到 Authentication 設定新增。";
   if (c.includes("network-request-failed")) return "網路連線失敗，請檢查網路後再試。";
   return (e && e.message) || "沒有成功，請再試一次。";
@@ -338,27 +329,29 @@ document.addEventListener("click", (e) => {
   if (a === "veil") { if (e.target === el) closeSheet(); return; }
   if (el.disabled) return;
   const p = el.dataset.pid ? partyById(el.dataset.pid) : null;
+  if (!uid() && ["new", "setme", "apply", "checkin", "invite"].includes(a)) {
+    S.afterLogin = { act: a, type: el.dataset.type, pid: el.dataset.pid };
+    return openAuth();
+  }
   switch (a) {
-    case "auth": openAuth(el.dataset.mode); break;
+    case "auth": openAuth(); break;
     case "doauth": {
-      const mode = el.dataset.mode; const err = $("u_err");
-      const name = $("u_name").value.trim(), pw = $("u_pw").value;
-      const show = (m) => { err.textContent = m; err.hidden = false; };
-      if (mode === "register") {
-        const bad = checkUsername(name); if (bad) return show(bad);
-        if (pw.length < 6) return show("密碼至少要 6 個字元。");
-        if (pw !== $("u_pw2").value) return show("兩次輸入的密碼不一樣。");
-      } else if (!name || !pw) return show("請輸入用戶名和密碼。");
-      el.disabled = true; el.textContent = mode === "register" ? "註冊中…" : "登入中…";
+      const err = $("u_err"); const name = $("u_name").value.trim(), pin = $("u_pin").value;
+      const bad = checkEntry(name, pin); if (bad) { err.textContent = bad; err.hidden = false; return; }
+      el.disabled = true; el.textContent = "進入中…";
       guard(async () => {
-        if (mode === "register") { await S.store.register(name, pw); toast(`註冊成功，歡迎 ${name}`); }
-        else { await S.store.login(name, pw); toast("登入成功"); }
-        closeSheet();
-      }, "u_err").finally(() => { if (el.isConnected) { el.disabled = false; el.textContent = mode === "register" ? "註冊" : "登入"; } });
+        await S.store.enter(name, pin);
+        closeSheet(); toast(`歡迎，${name}`);
+        const next = S.afterLogin; S.afterLogin = null;
+        if (next) setTimeout(() => { // 回到剛剛想做的事
+          const sel = `[data-act="${next.act}"]` + (next.type ? `[data-type="${next.type}"]` : "") + (next.pid ? `[data-pid="${next.pid}"]` : "");
+          document.querySelector(sel)?.click();
+        }, 300);
+      }, "u_err").finally(() => { if (el.isConnected) { el.disabled = false; el.textContent = "進入"; } });
       break;
     }
     case "signout":
-      if (el.dataset.confirm) guard(async () => { await S.store.signOut(); toast("已登出，現在是新的訪客"); });
+      if (el.dataset.confirm) guard(async () => { await S.store.signOut(); toast("已登出"); });
       else { el.dataset.confirm = "1"; el.textContent = "再按一次確認登出"; }
       break;
     case "tab": S.tab = el.dataset.tab; if (S.tab !== "events") S.selected = null; renderPanel(); drawPins(); break;
@@ -441,8 +434,10 @@ renderPanel();
     S.store = await createStore(CFG);
     S.store.onUser((u) => {
       if (u && u.error) { S.user = null; S.authError = errMsg(u.error); renderPanel(); return; }
-      const changed = (S.user && S.user.uid) !== (u && u.uid);
+      const changed = !S.subscribed || (S.user && S.user.uid) !== (u && u.uid);
+      S.subscribed = true;
       S.user = u; S.authError = null;
+      if (!u && !S.askedName) { S.askedName = true; openAuth(); } // 第一次打開，先問名字
       if (changed) subscribe();
       renderPanel(); drawPins();
     });

@@ -12,14 +12,12 @@ service cloud.firestore {
     function str(v, max) { return v is string && v.size() <= max; }
     function partyPath(id) { return /databases/$(database)/documents/parties/$(id); }
 
-    // 公開顯示名稱與頭像（登入時自動寫入）
+    // 公開顯示名稱（進入時寫入）
     match /users/{uid} {
       allow read: if true;
       allow create, update: if signedIn() && me() == uid
-        && d().keys().hasOnly(['name', 'photo', 'registered', 'updatedAt'])
-        && str(d().name, 60) && str(d().photo, 500)
-        // 只有用密碼註冊過的帳號才能標成 registered
-        && (d().get('registered', false) == false || request.auth.token.firebase.sign_in_provider == 'password');
+        && d().keys().hasOnly(['name', 'photo', 'updatedAt'])
+        && str(d().name, 60) && d().name.size() > 0 && str(d().photo, 500);
       allow delete: if signedIn() && me() == uid;
     }
 
