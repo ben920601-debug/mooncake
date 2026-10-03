@@ -9,6 +9,8 @@
     python admin_tools.py close-expired         # 把已過期但還標成進行中的活動關掉
     python admin_tools.py leaderboard           # 印出月兔榜
     python admin_tools.py purge --days 30 --yes # 刪掉 30 天前的活動、申請、打卡與照片
+    python admin_tools.py seed                  # 灌入測試資料（測試帳號密碼都是 0000）
+    python admin_tools.py unseed                # 刪掉所有測試資料與測試帳號
 """
 from __future__ import annotations
 
@@ -17,20 +19,24 @@ import os
 import sys
 import time
 from collections import Counter
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 try:
     import firebase_admin
-    from firebase_admin import credentials, firestore
+    from firebase_admin import auth, credentials, firestore
 except ImportError:  # pragma: no cover
     sys.exit("請先安裝套件：pip install -r requirements.txt")
 
 
 def connect():
     path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "serviceAccount.json"
+    if not os.path.isabs(path):
+        path = str(BASE_DIR / path)
     if not os.path.exists(path):
         sys.exit(f"找不到服務帳戶金鑰：{path}\n請到 Firebase 主控台 → 專案設定 → 服務帳戶 下載。")
     if not firebase_admin._apps:
@@ -118,6 +124,101 @@ def cmd_purge(db, args):
     print(f"已刪除 {total} 筆")
 
 
+def _seed_uid(user: dict, create: bool) -> str | None:
+    """取得（或建立）測試帳號的 uid。"""
+    import seed_data as sd
+    email = sd.name_to_email(user["name"])
+    try:
+        u = auth.get_user_by_email(email)
+        if create:
+            auth.update_user(u.uid, password=sd.pin_to_password(sd.SEED_PIN), display_name=user["name"])
+        return u.uid
+    except auth.UserNotFoundError:
+        if not create:
+            return None
+        return auth.create_user(email=email, password=sd.pin_to_password(sd.SEED_PIN), display_name=user["name"]).uid
+
+
+def cmd_seed(db, _args):
+    import seed_data as sd
+    now = now_ms()
+    ago = lambda m: now - m * 60_000
+    print("建立測試帳號…")
+    uid = {u["key"]: _seed_uid(u, create=True) for u in sd.SEED_USERS}
+
+    batch = db.batch()
+    for u in sd.SEED_USERS:
+        batch.set(db.collection("users").document(uid[u["key"]]), {"name": u["name"], "photo": "", "updatedAt": now})
+        batch.set(db.collection("players").document(uid[u["key"]]),
+                  {"lat": u["lat"], "lng": u["lng"], "city": u["city"], "updatedAt": ago(10)})
+    hours = sd.event_hours()
+    parties = {}
+    for p in sd.SEED_PARTIES:
+        created = ago(p["minutes_ago"])
+        parties[p["id"]] = p
+        batch.set(db.collection("parties").document(sd.SEED_PREFIX + p["id"]), {
+            "type": p["type"], "title": p["title"], "landmark": p["landmark"], "when": p["when"], "note": p["note"],
+            "capacity": p["capacity"], "lat": p["lat"], "lng": p["lng"], "city": p["city"],
+            "hostId": uid[p["host"]], "active": True, "createdAt": created,
+            "expiresAt": max(created, now) + hours * 3600_000,
+        })
+    for r in sd.SEED_REQUESTS:
+        host = uid[parties[r["party"]]["host"]]
+        from_id = uid[r["from"]] if r["kind"] == "apply" else host
+        to_id = host if r["kind"] == "apply" else uid[r["to"]]
+        doc = {"partyId": sd.SEED_PREFIX + r["party"], "kind": r["kind"], "fromId": from_id, "toId": to_id,
+               "hostId": host, "msg": r["msg"], "status": r["status"], "createdAt": ago(r["minutes_ago"])}
+        if r["status"] != "pending":
+            doc["respondedAt"] = ago(max(1, r["minutes_ago"] - 5))
+        batch.set(db.collection("requests").document(sd.SEED_PREFIX + r["id"]), doc)
+    for c in sd.SEED_CHECKINS:
+        t = ago(c["minutes_ago"])
+        photo_id = sd.SEED_PREFIX + "ph-" + c["id"]
+        batch.set(db.collection("photos").document(photo_id), {"ownerId": uid[c["user"]], "data": sd.art(c["art"]), "createdAt": t})
+        batch.set(db.collection("checkins").document(sd.SEED_PREFIX + c["id"]),
+                  {"partyId": sd.SEED_PREFIX + c["party"], "userId": uid[c["user"]], "photoId": photo_id,
+                   "caption": c["caption"], "createdAt": t})
+    batch.commit()
+
+    print(f"已建立 {len(sd.SEED_USERS)} 個測試帳號、{len(sd.SEED_PARTIES)} 個活動、"
+          f"{len(sd.SEED_REQUESTS)} 筆申請/邀請、{len(sd.SEED_CHECKINS)} 張打卡照片。")
+    print(f"活動會在 {hours} 小時後從地圖消失（EVENT_HOURS），想延長就再執行一次 seed。\n")
+    print("可以用這些名字登入測試（密碼都是 0000）：")
+    for u in sd.SEED_USERS:
+        print(f"  {u['name']}")
+    print("\n建議先用「測試小明」登入：他有一個待回覆的申請，也收到一個邀請。")
+    print("測試完執行 python admin_tools.py unseed 就會全部刪掉。")
+
+
+def cmd_unseed(db, _args):
+    import seed_data as sd
+    removed = 0
+    for name in ("parties", "requests", "checkins", "photos"):
+        refs = [d.reference for d in db.collection(name).select([]).stream() if d.id.startswith(sd.SEED_PREFIX)]
+        for i in range(0, len(refs), 400):
+            b = db.batch()
+            for ref in refs[i:i + 400]:
+                b.delete(ref)
+            b.commit()
+        removed += len(refs)
+    users = 0
+    for u in sd.SEED_USERS:
+        uid = _seed_uid(u, create=False)
+        if not uid:
+            continue
+        db.collection("users").document(uid).delete()
+        db.collection("players").document(uid).delete()
+        # 測試帳號自己後來新增的資料也一起清掉
+        for name, field in (("parties", "hostId"), ("requests", "fromId"), ("requests", "toId"),
+                            ("checkins", "userId"), ("photos", "ownerId")):
+            for d in db.collection(name).where(field, "==", uid).stream():
+                d.reference.delete()
+                removed += 1
+        auth.delete_user(uid)
+        users += 1
+    print(f"已刪除 {removed} 筆測試資料、{users} 個測試帳號。")
+
+
 def main():
     ap = argparse.ArgumentParser(description="中秋烤肉地圖管理工具")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -128,11 +229,14 @@ def main():
     pg = sub.add_parser("purge", help="刪除舊資料")
     pg.add_argument("--days", type=int, default=30)
     pg.add_argument("--yes", action="store_true", help="真的刪除（沒加只預覽）")
+    sub.add_parser("seed", help="灌入測試資料（測試帳號密碼 0000）")
+    sub.add_parser("unseed", help="刪除所有測試資料與測試帳號")
     args = ap.parse_args()
 
     db = connect()
     {"stats": cmd_stats, "close-expired": cmd_close_expired,
-     "leaderboard": cmd_leaderboard, "purge": cmd_purge}[args.cmd](db, args)
+     "leaderboard": cmd_leaderboard, "purge": cmd_purge,
+     "seed": cmd_seed, "unseed": cmd_unseed}[args.cmd](db, args)
 
 
 if __name__ == "__main__":

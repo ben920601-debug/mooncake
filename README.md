@@ -119,7 +119,8 @@ sudo bash /opt/mooncake-bbq-map/deploy/setup_tunnel.sh <Token>     # 伺服器�
 ```
 mooncake-bbq-map/
 ├── app.py                 Flask 伺服器（讀 .env、注入 Firebase 設定、示範模式判斷）
-├── admin_tools.py         管理工具：統計、關閉過期活動、排行榜、清除舊資料
+├── admin_tools.py         管理工具：統計、關閉過期活動、排行榜、清除舊資料、測試資料
+├── seed_data.py           測試資料內容（seed / unseed 用）
 ├── templates/index.html   頁面骨架
 ├── static/
 │   ├── css/style.css      中秋夜空主題
@@ -164,6 +165,22 @@ python admin_tools.py close-expired          # 把過期活動標成已結束
 python admin_tools.py leaderboard --top 10   # 月兔榜
 python admin_tools.py purge --days 30        # 預覽要刪的舊資料
 python admin_tools.py purge --days 30 --yes  # 真的刪
+```
+
+### 測試資料
+
+```bash
+python admin_tools.py seed     # 灌入測試資料
+python admin_tools.py unseed   # 全部刪掉（只刪測試資料，不會動到真正玩家）
+```
+
+`seed` 會建立 6 個可以實際登入的測試帳號（**密碼都是 `0000`**）：測試小明、測試阿華、測試美玲、測試志強、測試小玉、測試阿凱，以及台北、新北、台中共 6 個烤肉點和煙火攤，還有申請、邀請、打卡照片。建議用「測試小明」登入：他有一筆待回覆的申請，也收到一個邀請。
+
+活動會在 `EVENT_HOURS` 小時後從地圖消失，想延長就再跑一次 `seed`（會更新，不會重複）。
+
+在伺服器上執行（金鑰放在 `/opt/mooncake-bbq-map/serviceAccount.json`）：
+```bash
+cd /opt/mooncake-bbq-map && sudo -u mooncake .venv/bin/python admin_tools.py seed
 ```
 
 ---
